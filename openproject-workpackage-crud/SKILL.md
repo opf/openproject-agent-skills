@@ -99,6 +99,14 @@ For `Claim`, expect the action to set the assignee and move the Work Package to
 the appropriate in-progress status in one step when that action is available
 for the Work Package type.
 
+Action names vary by workflow, project, and Work Package type. The same intent
+may surface as `Claim`, `Assign to me`, `Take`, or something project-specific.
+If the CLI returns `No unique available action from input X found`, read the
+action list the CLI prints and pick from it — do not invent names. In
+particular, on Work Package types that are not `Implementation` tickets (e.g.
+`Epic`, `Open Point`), the list is often a single item like `Assign to me` and
+will not include development-lifecycle actions.
+
 For internal software-development workflows, these action names are especially
 common on `Implementation` tickets:
 
@@ -111,6 +119,44 @@ common on `Implementation` tickets:
 
 Always verify the available actions on the current Work Package state before
 executing one, because the action list changes with status and type.
+
+## Status transitions
+
+`Status` is not a custom field — it will not resolve through `--set`. Do not
+attempt `--set "Status=<name>"`; it returns `unknown_field`.
+
+Prefer, in order:
+
+1. A custom action that transitions status (e.g. `Claim`, `Developed`), when
+   the action list exposes one.
+2. The dedicated `--status <name>` flag on `op update workpackage`, when the
+   CLI build supports it.
+
+Status transitions are gated by the current user's role **and** the workflow
+defined for the Work Package's type. A transition that looks obvious may still
+be denied with
+`PropertyConstraintViolation: no valid transition exists from old to new status
+for the current user's roles`.
+
+When that happens, do not probe by trying other status names in sequence —
+that mutates shared state with agent-guessed values. Keep the CLI as the
+default interface: try the explicit `--status` update first, and only if it is
+rejected and the CLI does not expose the allowed transitions, fetch them from
+the form endpoint:
+
+```
+POST /api/v3/work_packages/<id>/form
+```
+
+and read `_embedded.schema.status._embedded.allowedValues` (names) or
+`_embedded.schema.status._links.allowedValues` (hrefs). The plain schema GET
+at `_links.schema.href` does **not** populate `allowedValues` — only the form
+endpoint does, because allowed transitions are computed in the context of the
+current user and current state.
+
+Report the allowed values back to the user and ask which to apply. Do not
+choose a replacement status yourself; `in progress`, `needs clarification`,
+and `decided` are not interchangeable intents.
 
 ## Body fields and Epic schemas
 
@@ -127,6 +173,18 @@ Custom fields that hold markdown bodies come back as objects, not strings:
 Use the `raw` value for any read/modify/write round-trip. The `html` field is
 OpenProject's rendered output and will not survive being echoed back as new
 content.
+
+Before patching a Formattable body field, save the current `raw` to a local
+file. If the update silently truncates or wipes the field — which has happened
+when the CLI sent a plain string instead of `{"raw": "..."}` for Formattable
+custom fields — you need the pre-update content to restore.
+
+After the update, always re-`inspect` and confirm the new `raw` length and
+trailing content match expectations. `--dry-run --json` only validates field
+resolution; it does not fetch the API and therefore does not catch
+wire-format bugs such as missing `{"raw": ...}` wrapping, incorrect
+`lockVersion`, or server-side content coercion. Treat post-apply inspect as
+mandatory on Formattable fields.
 
 The `Epic` type commonly exposes three body fields alongside the standard
 `description`:
@@ -160,6 +218,15 @@ or the exact missing detail.
   `op inspect workpackage <id> --json`.
 - For workflow actions, prefer exact action titles as exposed by the current
   Work Package, including capitalization and spaces.
+- A successful `--dry-run --json` is necessary but not sufficient: it validates
+  label resolution and value coercion, not the wire shape of the PATCH. For
+  Formattable fields, for any first-time use of `--set` on a field type you
+  haven't previously round-tripped, and after any status or link change,
+  follow up with `op inspect workpackage <id> --json` and assert on the
+  post-state.
+- Do not iterate through candidate statuses to find one the workflow accepts.
+  A rejected transition on a shared Work Package means: stop, fetch allowed
+  values from the form endpoint, and ask the user.
 
 ## Scope
 
