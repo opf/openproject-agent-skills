@@ -192,15 +192,33 @@ server's acceptance of the payload, the `lockVersion`, or any server-side
 coercion of the raw content. Post-apply inspect remains the authoritative
 check on any body-field write.
 
-The `Epic` type commonly exposes three body fields alongside the standard
-`description`:
+The `Epic` type is typically authored as five logical body sections — one
+standard field and four markdown sections carried in custom fields. The exact
+schema varies per project, so always confirm via `field_labels` on the live
+response before writing; the list below is a content convention, not a
+guarantee.
 
-- `Acceptance criteria` — the detailed specification body for the Epic. If a
-  user asks to update a label like "Detailed Specification" on an Epic and the
-  schema has no such label, propose `Acceptance criteria` as the likely target
-  before declaring `unknown_field`.
-- `Motivation and background information` — the "why" behind the Epic.
+- `description` — the short framing paragraph. Standard field, serialized as a
+  raw string.
+- `Motivation and background information` — the "why" behind the Epic,
+  including key limitations of the status quo.
+- `Acceptance criteria` — the detailed specification body. If a user asks to
+  update a label like "Detailed Specification" on an Epic and the schema has
+  no such label, propose `Acceptance criteria` as the likely target before
+  declaring `unknown_field`.
 - `Out of scope` — explicit non-goals.
+- `Alternatives considered and rejected` — options that were weighed and
+  discarded, with brief rejection rationale. In many projects this is **not a
+  separate custom field** but a heading-level subsection at the end of
+  `Acceptance criteria` (e.g. `### Alternatives considered and rejected`).
+  Before declaring `unknown_field`, check whether the existing
+  `Acceptance criteria` markdown already contains such a heading, and
+  prefer a read/modify/write on that field to proposing a new one.
+
+This is a convention, not a stable schema. Content conventions age quickly
+and OpenProject has no machine-readable "body layout" for Epics today, so
+verify each Epic's actual `field_labels` on read and treat missing labels
+as "not on this template" rather than "wrong call".
 
 Epic schemas also commonly expose people/metadata labels such as `Designer`,
 `Developers`, `Requested by`, `Roadmap`, `Module`, `List`, `Mockups`, and
