@@ -10,6 +10,27 @@ description: Use when prompts reference OpenProject work packages such as WP#123
 Use `openproject-cli` JSON commands as the machine interface for Work Package
 CRUD workflows. Read automatically, but use `--dry-run --json` before writes.
 
+## Prerequisites
+
+This skill requires an `openproject-cli` build that exposes the JSON, dry-run,
+and workflow-action contract used throughout the rest of this document:
+
+- `--json` and `--children` on `op inspect workpackage`
+- `--dry-run --json` on `op create workpackage` and `op update workpackage`
+- `--set`, `--action`, and `--status` on `op update workpackage`
+
+Probe before the first call by running `op inspect workpackage --help` and
+`op update workpackage --help`. If the listed flags are absent, stop and tell
+the user the CLI build does not yet support this skill — do not fall back to
+raw `/api/v3` calls or to parsing the human-text CLI output.
+
+This contract is tracked alongside the skill itself; see WP#74413's "Technical
+notes" for the sibling `openproject-cli` implementation work. Once an upstream
+release ships these flags, replace this section with a minimum semver pin.
+Until then, the flag list above is the source of truth — not a version string,
+and not a branch SHA, since unmerged SHAs rebase and give an agent nothing it
+can compare against.
+
 ## When to Use
 
 - Prompt references `WP#1234`
