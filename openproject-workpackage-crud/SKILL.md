@@ -164,27 +164,33 @@ Field labels are per-project and per-type — the same label may be present on
 one Work Package and absent on another. Always read the schema from
 `field_labels` on the live response, never assume.
 
-Custom fields that hold markdown bodies come back as objects, not strings:
+Formattable custom fields are normalized to raw markdown strings in the JSON
+inspect output, the same shape as `description`:
 
 ```json
-"customField401": {"format": "markdown", "html": "...", "raw": "..."}
+"customField401": "### Heading\n\nBody text with a [link](...)..."
 ```
 
-Use the `raw` value for any read/modify/write round-trip. The `html` field is
-OpenProject's rendered output and will not survive being echoed back as new
-content.
+Read and write this value directly as markdown. Do not treat it as an object
+with `format` / `html` / `raw` keys — older CLI builds exposed that shape, but
+recent versions collapse Formattable custom fields to the raw string on read
+and wrap them back into `{"raw": ...}` on PATCH transparently inside
+`--set "Label=<markdown>"`.
 
-Before patching a Formattable body field, save the current `raw` to a local
-file. If the update silently truncates or wipes the field — which has happened
-when the CLI sent a plain string instead of `{"raw": "..."}` for Formattable
-custom fields — you need the pre-update content to restore.
+For a read/modify/write round-trip:
 
-After the update, always re-`inspect` and confirm the new `raw` length and
-trailing content match expectations. `--dry-run --json` only validates field
-resolution; it does not fetch the API and therefore does not catch
-wire-format bugs such as missing `{"raw": ...}` wrapping, incorrect
-`lockVersion`, or server-side content coercion. Treat post-apply inspect as
-mandatory on Formattable fields.
+1. Capture the current string value into a local file so you have a recovery
+   copy if the patch is later observed to have truncated content.
+2. Modify the markdown.
+3. `op update workpackage <id> --set "<Label>=<new markdown>" --dry-run --json`
+   to validate schema resolution.
+4. Apply, then re-`inspect` and assert on the new string's length and
+   expected trailing content.
+
+`--dry-run --json` validates label resolution and value coercion, not the
+server's acceptance of the payload, the `lockVersion`, or any server-side
+coercion of the raw content. Post-apply inspect remains the authoritative
+check on any body-field write.
 
 The `Epic` type commonly exposes three body fields alongside the standard
 `description`:
@@ -219,9 +225,9 @@ or the exact missing detail.
 - For workflow actions, prefer exact action titles as exposed by the current
   Work Package, including capitalization and spaces.
 - A successful `--dry-run --json` is necessary but not sufficient: it validates
-  label resolution and value coercion, not the wire shape of the PATCH. For
-  Formattable fields, for any first-time use of `--set` on a field type you
-  haven't previously round-tripped, and after any status or link change,
+  label resolution and value coercion, not server acceptance of the patch. For
+  Formattable body fields, for any first-time use of `--set` on a field type
+  you haven't previously round-tripped, and after any status or link change,
   follow up with `op inspect workpackage <id> --json` and assert on the
   post-state.
 - Do not iterate through candidate statuses to find one the workflow accepts.
