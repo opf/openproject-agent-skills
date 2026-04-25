@@ -11,12 +11,15 @@ intent surfaces as `Assign to me` or `Take`, with the CLI returning
 `No unique available action from input Claim found`. The agent's response was
 to invent neighboring names.
 
-**Fix:** Teach the agent to read the action list the CLI prints on failure
-and pick from it; call out that on `Epic` and `Open Point` types the list is
-often a single `Assign to me`, not the development-lifecycle actions.
+**Fix:** Forbid parsing human CLI output to discover action titles. Require an
+exact user-provided action title when using `--action`; otherwise ask one short
+follow-up question or report that the current CLI contract does not expose
+actions safely. Call out that on `Epic` and `Open Point` types the valid title
+is often `Assign to me` rather than a development-lifecycle action.
 
 **Commit:** `79bf63d [#74413] harden skill for real-world WP updates`
-**Skill section:** Update Workflow → action-name variability paragraph.
+**Skill section:** Update Workflow → action-name variability paragraph; Write
+Safety.
 
 ## L2 — `Status` is not a custom field
 

@@ -51,6 +51,17 @@ Recognize only explicit Work Package references in v1:
 - full OpenProject Work Package URLs
 - clearly labeled numeric references like `work package 1234`
 
+Normalize every recognized reference to a numeric Work Package ID before
+calling `op`:
+
+- `WP#1234` → `1234`
+- `work package 1234` → `1234`
+- full URL → extract the numeric ID from the Work Package path segment, then
+  use that numeric ID in all CLI calls
+
+If a full URL does not contain an unambiguous numeric ID in the expected Work
+Package path shape, ask one short follow-up question instead of guessing.
+
 Do not guess from titles or fuzzy search terms.
 
 ## Read Workflow
@@ -122,14 +133,18 @@ for the Work Package type.
 
 Action names vary by workflow, project, and Work Package type. The same intent
 may surface as `Claim`, `Assign to me`, `Take`, or something project-specific.
-If the CLI returns `No unique available action from input X found`, read the
-action list the CLI prints and pick from it — do not invent names. In
-particular, on Work Package types that are not `Implementation` tickets (e.g.
-`Epic`, `Open Point`), the list is often a single item like `Assign to me` and
-will not include development-lifecycle actions.
+Do not parse human-text CLI output to discover valid action titles. If the user
+already supplied the exact action title, use that exact string. If the prompt
+only supplies an intent such as "claim it" or "move it to review" and the
+current CLI does not expose action titles through a machine-readable interface,
+ask one short follow-up question for the exact action title or explain that the
+current CLI contract is insufficient for safe action discovery. In particular,
+on Work Package types that are not `Implementation` tickets (e.g. `Epic`,
+`Open Point`), the valid title is often something like `Assign to me` rather
+than a development-lifecycle action.
 
 For internal software-development workflows, these action names are especially
-common on `Implementation` tickets:
+common on `Implementation` tickets, but they are examples rather than defaults:
 
 - `Claim`: assign the ticket to the current user and move it into the active
   development state
@@ -138,8 +153,9 @@ common on `Implementation` tickets:
 - `Finish implementation`: close the ticket when implementation work is fully
   complete
 
-Always verify the available actions on the current Work Package state before
-executing one, because the action list changes with status and type.
+Always treat action availability as state-dependent. A title that exists on one
+Work Package or status may be invalid on another, so verify the post-state with
+`op inspect workpackage <id> --json` after executing any action.
 
 ## Status transitions
 
@@ -149,7 +165,8 @@ attempt `--set "Status=<name>"`; it returns `unknown_field`.
 Prefer, in order:
 
 1. A custom action that transitions status (e.g. `Claim`, `Developed`), when
-   the action list exposes one.
+   the exact action title is already known from the user's request or from a
+   machine-readable CLI surface.
 2. The dedicated `--status <name>` flag on `op update workpackage`, when the
    CLI build supports it.
 
@@ -261,8 +278,8 @@ or the exact missing detail.
 - For `--action` workflows that do not yet support `--dry-run --json`, execute
   the action only when the requested action is explicit, then verify with
   `op inspect workpackage <id> --json`.
-- For workflow actions, prefer exact action titles as exposed by the current
-  Work Package, including capitalization and spaces.
+- For workflow actions, use exact action titles only. Do not derive them from
+  human-text CLI output.
 - A successful `--dry-run --json` is necessary but not sufficient: it validates
   label resolution and value coercion, not server acceptance of the patch. For
   Formattable body fields, for any first-time use of `--set` on a field type

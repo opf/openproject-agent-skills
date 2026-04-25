@@ -6,9 +6,9 @@ Reusable agent skills for working with OpenProject from the command line.
 
 ### `openproject-workpackage-crud`
 
-A `SKILL.md` that teaches Claude/Codex agents to drive `openproject-cli` for
-Work Package CRUD: inspecting a Work Package and its direct children, creating
-child Work Packages, and updating fields with dry-run guardrails.
+A `SKILL.md` that teaches agents to drive `openproject-cli` for Work Package
+CRUD: inspecting a Work Package and its direct children, creating child Work
+Packages, and updating fields with dry-run guardrails.
 
 - Source: [`openproject-workpackage-crud/SKILL.md`](openproject-workpackage-crud/SKILL.md)
 - Scope: Work Package CRUD only — not projects, notifications, time entries,
@@ -18,7 +18,9 @@ child Work Packages, and updating fields with dry-run guardrails.
 
 #### Install
 
-Drop the skill directory into your agent's skill location. For Claude Code:
+Drop the skill directory into your agent's skill location.
+
+Example for Claude Code:
 
 ```sh
 cp -r openproject-workpackage-crud ~/.claude/skills/
