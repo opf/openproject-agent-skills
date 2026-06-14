@@ -1,109 +1,84 @@
 # With-skill scenario (GREEN)
 
-Same setup as `baseline.md` — same CLI build, same Epic, same goal — but with
-`openproject-workpackage-crud/SKILL.md` loaded. Each numbered failure from the
-baseline is closed by a specific section of the skill.
+Same setup as `baseline.md` — same `op` build, same Work Package, same goal —
+but with `openproject-workpackage-crud/SKILL.md` loaded. Each numbered failure
+from the baseline is closed by a specific section of the skill.
 
 ## How each baseline failure is prevented
 
 ### 1. Reads collapse into fuzzy search → Reference Parsing
 
-The skill's "Reference Parsing" section enumerates exactly three accepted
-forms (`WP#1234`, full WP URLs, `work package 1234`) and forbids title-based
-fallback. The agent inspects via:
+The "Reference Parsing" section enumerates exactly the accepted forms
+(`WP#1234`, `work package 1234`, full WP URLs) and forbids title-based
+fallback. URLs are not scraped; the numeric ID is extracted from the URL path
+and then inspected via the CLI:
 
 ```
-op inspect workpackage 1234 --children --json
+op work-package inspect 1234 --format json
+op work-package list --parent-id 1234 --format json
 ```
 
-and parses `field_labels` + `fields` from the JSON response. URLs are not
-scraped; the numeric ID is extracted from the URL path and then inspected via
-the CLI.
+### 2. Stale command syntax → resource-first commands
 
-### 2. `--set "Status=..."` → Status transitions
+The skill's Read/Create/Update workflows use only the current
+`op work-package <verb>` form with the global `--format json` flag. There is no
+`inspect workpackage`, no `--children`, and no `--json`; children come from
+`list --parent-id`.
 
-The "Status transitions" section names this exact pitfall: `Status` is not a
-custom field and will return `unknown_field` if pushed through `--set`. The
-agent prefers a custom action (`Claim`, `Developed`) when the exact action
-title is already known, and the dedicated `--status <name>` flag otherwise.
+### 3. `--set` custom-field / status updates → fixed-flag updates
 
-### 3. Probing candidate status values → form endpoint fallback
-
-A `PropertyConstraintViolation` on `--status` is a stop condition, not a
-prompt to retry. The skill instructs the agent to fetch allowed values from:
-
-```
-POST /api/v3/work_packages/<id>/form
-```
-
-read `_embedded.schema.status._embedded.allowedValues`, report them back to
-the user, and ask which to apply. `in progress`, `needs clarification`, and
-`decided` are explicitly called out as non-interchangeable.
+The "Update Workflow" and "Not Yet Supported By The CLI" sections state that
+`--set` does not exist and arbitrary custom fields and KPIs are not writable.
+Updates use only the supported flags (`--subject`, `--type`, `--assignee`,
+`--description`, `--attach`, `--action`). If the user asks for a custom field,
+the agent says it is not available through this CLI rather than guessing flag
+variants.
 
 ### 4. Action-name invention → exact-title-only action handling
 
-The skill forbids parsing human CLI output to discover valid action titles.
-If the user already provided the exact action title, the agent can execute it
-and verify with a follow-up inspect. If the prompt only gives an intent such
-as "claim it", the agent asks one short follow-up question for the exact title
-or reports that the current CLI contract does not expose actions safely. It
-also calls out that on `Epic` and `Open Point` types the valid title is often
-something like `Assign to me`, not the development-lifecycle actions used on
-`Implementation` tickets.
+"Workflow actions and status" forbids guessing action titles, which are not
+exposed in JSON output. If the user gave the exact title, the agent uses it
+verbatim and verifies with a follow-up inspect. If they gave only an intent
+("claim it"), the agent asks one short follow-up for the exact title. It calls
+out that on `Epic` and `Open Point` types the claim-equivalent is often
+`Assign to me`.
 
-### 5. Formattable fields treated as objects → CLI-normalized contract
+### 5. Create assumes a parent flag → documented `--parent` gap
 
-The "Body fields and Epic schemas" section describes the post-#74418 contract:
-Formattable custom fields read as raw markdown strings and write through
-`--set "Label=<markdown>"`, which the CLI wraps as `{"raw": ...}`
-transparently. The agent reads and writes raw markdown only — never the
-rendered `html` and never an explicit `{"raw": ...}` wrapper from its own
-side.
+"Create Workflow" states plainly that the CLI has no `--parent` flag and cannot
+link a parent at create time. Rather than silently creating an orphan, the
+agent tells the user the parent cannot be set and confirms whether to create
+the Work Package standalone in the same project.
 
-The round-trip checklist in the skill mandates:
+### 6. Description overwritten → read-modify-write
 
-1. capture current `raw` to a recovery file,
-2. modify markdown,
-3. `--dry-run --json` to validate label resolution,
-4. apply, then re-inspect and assert on the new string's length and trailing
-   content.
+"Update Workflow" requires inspecting the current `description` (raw markdown)
+first, applying the change locally, then writing the full new markdown back via
+`--description`. The existing body is amended, not replaced.
 
-### 6. Epic body schema assumed → field_labels read first
+### 7. Live writes without confirmation → confirm-then-verify
 
-The five-section Epic body convention is documented as a **convention**, not
-a stable schema. The agent always reads `field_labels` on the live response
-first. If a user asks for "Detailed Specification" and the schema doesn't
-expose that label, the agent proposes `Acceptance criteria` (or a subheading
-inside it, like `### Alternatives considered and rejected`) before declaring
-`unknown_field`.
-
-### 7. Live writes on first attempt → dry-run guardrail
-
-"Update Workflow", "Create Workflow", and "Write Safety" all require
-`--dry-run --json` first. The live mutation runs only after the dry-run
-returns a clean resolution and the user's intent is unambiguous.
+"Write Safety" replaces the missing dry-run with a discipline: state the exact
+intended change, confirm clear user intent, execute, then run
+`op work-package inspect <id> --format json` to verify the post-state.
 
 ### 8. Fallback to raw `/api/v3` → structured-error reasoning
 
-"Write Safety" is explicit: "If the CLI returns structured JSON errors, reason
-from those errors instead of switching to raw API calls." The form-endpoint
-fallback in (3) is the *only* sanctioned raw-API call, and it's read-only.
+"Write Safety" is explicit: reason from the CLI's structured errors instead of
+switching to raw API calls. There is no sanctioned raw-API escape hatch in this
+contract.
 
 ## Outcome
 
-- Reads land on the right Work Package every time, with `field_labels` and
-  custom-field IDs in context.
-- No stray status writes; rejected transitions surface allowed values to the
-  user instead of triggering a probe loop.
-- Action workflows do not rely on parsing human CLI output; they use an exact
-  user-provided title or stop for clarification.
-- Formattable body edits round-trip cleanly with a recovery copy and a
-  post-apply inspect assertion.
-- Epic body fields write to the correct label after a live `field_labels`
-  read.
-- Writes are gated by dry-run.
-- The CLI stays the primary interface; raw `/api/v3` is reserved for the
-  read-only allowed-values lookup.
+- Reads land on the right Work Package every time, via the current command
+  surface.
+- No looping on removed flags or stale syntax; unsupported requests get a clear
+  "not available through this CLI" instead of guesswork.
+- No orphan Work Packages: the `--parent` gap is surfaced before creating.
+- Descriptions round-trip cleanly through a read-modify-write.
+- Action workflows use an exact user-provided title or stop for clarification.
+- Every write is preceded by a stated intent and followed by a verifying
+  inspect; the CLI stays the only interface.
 
-The Epic-edit + child-create + claim + transition workflow completes in one
-scripted pass, matching the WP#74316 intent.
+The inspect + child-create + assignee + action workflow completes in one
+scripted pass.

@@ -7,297 +7,148 @@ description: Use when prompts reference OpenProject work packages such as WP#123
 
 ## Overview
 
-Use `openproject-cli` JSON commands as the machine interface for Work Package
-CRUD workflows. Read automatically, but use `--dry-run --json` before writes.
+Use `op work-package` commands as the machine interface for Work Package CRUD.
+Reads can run automatically. The current CLI has no `--dry-run`, so confirm
+intent before any write, then verify the result with a follow-up inspect.
 
-## Prerequisites
-
-This skill requires an `openproject-cli` build that exposes the JSON, dry-run,
-and workflow-action contract used throughout the rest of this document:
-
-- `--json` and `--children` on `op inspect workpackage`
-- `--dry-run --json` on `op create workpackage` and `op update workpackage`
-- `--set`, `--action`, and `--status` on `op update workpackage`
-
-Probe before the first call by running `op inspect workpackage --help` and
-`op update workpackage --help`. If the listed flags are absent, stop and tell
-the user the CLI build does not yet support this skill — do not fall back to
-raw `/api/v3` calls or to parsing the human-text CLI output.
-
-This contract is tracked alongside the skill itself; see WP#74413's "Technical
-notes" for the sibling `openproject-cli` implementation work. Once an upstream
-release ships these flags, replace this section with a minimum semver pin.
-Until then, the flag list above is the source of truth — not a version string,
-and not a branch SHA, since unmerged SHAs rebase and give an agent nothing it
-can compare against.
+Pass `--format json` for machine-readable output. `op` accepts either a numeric
+ID (`1234`) or a project-based identifier (`PROJ-123`) anywhere an ID is taken.
 
 ## When to Use
 
 - Prompt references `WP#1234`
 - Prompt includes an OpenProject Work Package URL
 - Prompt says `work package 1234`
-- Prompt asks to inspect a Work Package and its subitems
-- Prompt asks to create a child Work Package under an existing Work Package
-- Prompt asks to update Work Package fields such as KPIs
+- Prompt asks to inspect a Work Package and its children
+- Prompt asks to create a Work Package in a project
+- Prompt asks to update a Work Package subject, type, assignee, description, or
+  run a workflow action
 
-Do not use this skill for projects, notifications, time entries, or general
-OpenProject help.
+Do not use this skill for projects, notifications, time entries, budgets, or
+general OpenProject help.
 
 ## Reference Parsing
 
-Recognize only explicit Work Package references in v1:
-
-- `WP#1234`
-- full OpenProject Work Package URLs
-- clearly labeled numeric references like `work package 1234`
-
-Normalize every recognized reference to a numeric Work Package ID before
-calling `op`:
+Recognize only explicit Work Package references:
 
 - `WP#1234` → `1234`
 - `work package 1234` → `1234`
-- full URL → extract the numeric ID from the Work Package path segment, then
-  use that numeric ID in all CLI calls
+- full OpenProject Work Package URL → extract the numeric ID from the WP path
+  segment, then use that ID in CLI calls (do not scrape the page)
 
-If a full URL does not contain an unambiguous numeric ID in the expected Work
-Package path shape, ask one short follow-up question instead of guessing.
-
-Do not guess from titles or fuzzy search terms.
+Do not guess from titles or fuzzy search terms. If a URL has no unambiguous
+numeric ID, ask one short follow-up. Use `op work-package search <query>...`
+only when the user explicitly asks to search.
 
 ## Read Workflow
 
-For reads, fetch the parent Work Package plus direct children:
+Inspect the parent, then list its direct children:
 
 ```bash
-op inspect workpackage <id> --children --json
+op work-package inspect <id> --format json
+op work-package list --parent-id <id> --format json
 ```
 
-Summarize:
+`op work-package inspect <id> --types` lists the types available on the Work
+Package (use before changing type). `--open` opens it in a browser.
 
-- the parent Work Package
-- direct children only
-- relevant custom fields from `fields`
-- field mappings from `field_labels` when they matter for follow-up updates
+The JSON inspect response is a flat object:
+
+```json
+{
+  "id": 60586,
+  "display_id": "AC-70",
+  "subject": "...",
+  "type": "...",
+  "status": "...",
+  "assignee": "...",
+  "description": "<raw markdown>"
+}
+```
+
+`description` is raw markdown — safe for read/modify/write round-trips. The CLI
+does not return custom fields or a field-label schema, so only the fields above
+are available to read.
 
 ## Create Workflow
 
-Treat "associated with `WP#1234`" as "create a child under `WP#1234`" in this
-workflow.
-
-First run:
-
 ```bash
-op create workpackage --parent <id> --type <type> "<subject>" --dry-run --json
+op work-package create "<subject>" -p <project> --type <type> \
+  --assignee <user-id> --description "<markdown>"
 ```
 
-After a valid dry-run and clear user intent, execute the real create:
+`-p/--project` is required and takes a project numeric ID or identifier. Subject
+is the positional argument. `--assignee` takes a numeric user ID. If the prompt
+lacks the project or enough detail to create safely, ask one short follow-up.
 
-```bash
-op create workpackage --parent <id> --type <type> "<subject>" --json
-```
-
-If the prompt does not specify enough detail to create the child safely, ask one
-short follow-up question.
+The CLI has no `--parent` flag: it cannot set a parent at create time. If the
+user asks for a child under `WP#1234`, say the CLI cannot link a parent and
+confirm whether to create it standalone in the same project instead.
 
 ## Update Workflow
 
-First run:
+Each flag is applied as its own update. Supported flags:
 
 ```bash
-op update workpackage <id> --set "Field=Value" --dry-run --json
+op work-package update <id> --subject "<text>"
+op work-package update <id> --type <type>
+op work-package update <id> --assignee <user-id>      # numeric user ID
+op work-package update <id> --description "<markdown>"
+op work-package update <id> --attach <filepath>
+op work-package update <id> --action "<Action name>"  # workflow transition
 ```
 
-After a valid dry-run and clear user intent, execute the real update:
+To edit description text, inspect first to read the current `description`, apply
+the change locally, then write the full new markdown back via `--description`.
 
-```bash
-op update workpackage <id> --set "Field=Value" --json
-```
+### Workflow actions and status
 
-Prefer human field labels first. Raw API fields like `customField130` are the
-fallback when labels are ambiguous or already known.
+Status is not a writable field on this CLI; status changes go through
+`--action`/`-a`, which runs a named workflow transition. Action titles vary by
+Work Package type, project, and the current user's role, and they are **not**
+exposed in the JSON output, so they cannot be discovered machine-readably.
 
-For supported workflow actions such as `Claim`, `Developed`, and
-`Finish implementation`, use:
+- If the user gave the exact action title, use it verbatim — capitalization and
+  spaces included.
+- If they gave only an intent ("claim it", "move to review"), ask one short
+  follow-up for the exact title rather than guessing neighboring names.
+- Action availability is state-dependent: a title valid in one status may be
+  invalid in another. On non-`Implementation` types (`Epic`, `Open Point`) the
+  claim-equivalent is often `Assign to me`, not a development-lifecycle action.
 
-```bash
-op update workpackage <id> --action "<Action name>"
-```
+Common actions on internal `Implementation` tickets (examples, not defaults):
 
-If the current CLI does not support `--dry-run --json` for `--action`, treat
-actions as a documented exception to the normal write guardrail and verify the
-result with a follow-up inspect.
-
-For `Claim`, expect the action to set the assignee and move the Work Package to
-the appropriate in-progress status in one step when that action is available
-for the Work Package type.
-
-Action names vary by workflow, project, and Work Package type. The same intent
-may surface as `Claim`, `Assign to me`, `Take`, or something project-specific.
-Do not parse human-text CLI output to discover valid action titles. If the user
-already supplied the exact action title, use that exact string. If the prompt
-only supplies an intent such as "claim it" or "move it to review" and the
-current CLI does not expose action titles through a machine-readable interface,
-ask one short follow-up question for the exact action title or explain that the
-current CLI contract is insufficient for safe action discovery. In particular,
-on Work Package types that are not `Implementation` tickets (e.g. `Epic`,
-`Open Point`), the valid title is often something like `Assign to me` rather
-than a development-lifecycle action.
-
-For internal software-development workflows, these action names are especially
-common on `Implementation` tickets, but they are examples rather than defaults:
-
-- `Claim`: assign the ticket to the current user and move it into the active
-  development state
-- `Developed`: move the ticket from an in-development state to review, often
-  `needs review`
-- `Finish implementation`: close the ticket when implementation work is fully
-  complete
-
-Always treat action availability as state-dependent. A title that exists on one
-Work Package or status may be invalid on another, so verify the post-state with
-`op inspect workpackage <id> --json` after executing any action.
-
-## Status transitions
-
-`Status` is not a custom field — it will not resolve through `--set`. Do not
-attempt `--set "Status=<name>"`; it returns `unknown_field`.
-
-Prefer, in order:
-
-1. A custom action that transitions status (e.g. `Claim`, `Developed`), when
-   the exact action title is already known from the user's request or from a
-   machine-readable CLI surface.
-2. The dedicated `--status <name>` flag on `op update workpackage`, when the
-   CLI build supports it.
-
-Status transitions are gated by the current user's role **and** the workflow
-defined for the Work Package's type. A transition that looks obvious may still
-be denied with
-`PropertyConstraintViolation: no valid transition exists from old to new status
-for the current user's roles`.
-
-When that happens, do not probe by trying other status names in sequence —
-that mutates shared state with agent-guessed values. Keep the CLI as the
-default interface: try the explicit `--status` update first, and only if it is
-rejected and the CLI does not expose the allowed transitions, fetch them from
-the form endpoint:
-
-```
-POST /api/v3/work_packages/<id>/form
-```
-
-and read `_embedded.schema.status._embedded.allowedValues` (names) or
-`_embedded.schema.status._links.allowedValues` (hrefs). The plain schema GET
-at `_links.schema.href` does **not** populate `allowedValues` — only the form
-endpoint does, because allowed transitions are computed in the context of the
-current user and current state.
-
-Report the allowed values back to the user and ask which to apply. Do not
-choose a replacement status yourself; `in progress`, `needs clarification`,
-and `decided` are not interchangeable intents.
-
-## Body fields and Epic schemas
-
-Field labels are per-project and per-type — the same label may be present on
-one Work Package and absent on another. Always read the schema from
-`field_labels` on the live response, never assume.
-
-Formattable custom fields are normalized to raw markdown strings in the JSON
-inspect output, the same shape as `description`:
-
-```json
-"customField401": "### Heading\n\nBody text with a [link](...)..."
-```
-
-Read and write this value directly as markdown. Do not treat it as an object
-with `format` / `html` / `raw` keys — older CLI builds exposed that shape, but
-recent versions collapse Formattable custom fields to the raw string on read
-and wrap them back into `{"raw": ...}` on PATCH transparently inside
-`--set "Label=<markdown>"`.
-
-For a read/modify/write round-trip:
-
-1. Capture the current string value into a local file so you have a recovery
-   copy if the patch is later observed to have truncated content.
-2. Modify the markdown.
-3. `op update workpackage <id> --set "<Label>=<new markdown>" --dry-run --json`
-   to validate schema resolution.
-4. Apply, then re-`inspect` and assert on the new string's length and
-   expected trailing content.
-
-`--dry-run --json` validates label resolution and value coercion, not the
-server's acceptance of the payload, the `lockVersion`, or any server-side
-coercion of the raw content. Post-apply inspect remains the authoritative
-check on any body-field write.
-
-The `Epic` type is typically authored as five logical body sections — one
-standard field and four markdown sections carried in custom fields. The exact
-schema varies per project, so always confirm via `field_labels` on the live
-response before writing; the list below is a content convention, not a
-guarantee.
-
-- `description` — the short framing paragraph. Standard field, serialized as a
-  raw string.
-- `Motivation and background information` — the "why" behind the Epic,
-  including key limitations of the status quo.
-- `Acceptance criteria` — the detailed specification body. If a user asks to
-  update a label like "Detailed Specification" on an Epic and the schema has
-  no such label, propose `Acceptance criteria` as the likely target before
-  declaring `unknown_field`.
-- `Out of scope` — explicit non-goals.
-- `Alternatives considered and rejected` — options that were weighed and
-  discarded, with brief rejection rationale. In many projects this is **not a
-  separate custom field** but a heading-level subsection at the end of
-  `Acceptance criteria` (e.g. `### Alternatives considered and rejected`).
-  Before declaring `unknown_field`, check whether the existing
-  `Acceptance criteria` markdown already contains such a heading, and
-  prefer a read/modify/write on that field to proposing a new one.
-
-This is a convention, not a stable schema. Content conventions age quickly
-and OpenProject has no machine-readable "body layout" for Epics today, so
-verify each Epic's actual `field_labels` on read and treat missing labels
-as "not on this template" rather than "wrong call".
-
-Epic schemas also commonly expose people/metadata labels such as `Designer`,
-`Developers`, `Requested by`, `Roadmap`, `Module`, `List`, `Mockups`, and
-`Votes`. Resolve via `--set "<Label>=<value>"` the same way as any custom field.
-
-## Ambiguous Fields
-
-If `--dry-run --json` returns an ambiguous or invalid field resolution, do not
-guess. Ask one short follow-up question that names the conflicting field label
-or the exact missing detail.
+- `Claim`: assign to current user and move into the active development state
+- `Developed`: move from in-development to review (often `needs review`)
+- `Finish implementation`: close when implementation is fully complete
 
 ## Write Safety
 
-- Never create or update immediately when `--dry-run` is available.
-- Never infer a custom field name if schema resolution is unclear.
+- No `--dry-run` exists. State the exact intended change, confirm clear user
+  intent, execute, then run `op work-package inspect <id> --format json` to
+  verify the post-state.
 - Prefer one short clarification question over a wrong mutation.
-- If the CLI returns structured JSON errors, reason from those errors instead of
-  switching to raw API calls.
-- For `--action` workflows that do not yet support `--dry-run --json`, execute
-  the action only when the requested action is explicit, then verify with
-  `op inspect workpackage <id> --json`.
-- For workflow actions, use exact action titles only. Do not derive them from
-  human-text CLI output.
-- A successful `--dry-run --json` is necessary but not sufficient: it validates
-  label resolution and value coercion, not server acceptance of the patch. For
-  Formattable body fields, for any first-time use of `--set` on a field type
-  you haven't previously round-tripped, and after any status or link change,
-  follow up with `op inspect workpackage <id> --json` and assert on the
-  post-state.
-- Do not iterate through candidate statuses to find one the workflow accepts.
-  A rejected transition on a shared Work Package means: stop, fetch allowed
-  values from the form endpoint, and ask the user.
+- Do not invent action titles or iterate through candidates against a shared
+  Work Package. A rejected action is a stop condition: ask for the exact title.
+- If the CLI returns structured errors, reason from those errors instead of
+  switching to raw `/api/v3` calls.
+
+## Not Yet Supported By The CLI
+
+These were available in earlier CLI iterations but are absent from the current
+binary. Do not attempt them; if a user asks, say they are not available through
+this CLI today (they may return in a later release):
+
+- arbitrary custom field / KPI updates (no `--set "Field=Value"`)
+- reading custom fields or a field-label schema (`field_labels`)
+- Epic body fields beyond `description` (e.g. `Acceptance criteria`,
+  `Motivation and background information`, `Out of scope`)
+- setting status by name (`--status`) — use `--action` instead
+- setting a parent on create (`--parent`)
+- `--dry-run` write previews
 
 ## Scope
 
-This skill is intentionally limited to Work Package CRUD in the local
-`openproject-cli` workflow. It does not cover:
-
-- projects
-- notifications
-- time entries
-- search flows
-- attachment URL ingestion
-- MCP/server integrations
+Limited to Work Package CRUD via local `op work-package` commands. Does not
+cover projects, notifications, time entries, budgets, search-driven flows,
+attachment URL ingestion, or MCP/server integrations.
