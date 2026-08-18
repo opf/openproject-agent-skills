@@ -1,5 +1,13 @@
 # openproject-agent-skills
 
+> [!WARNING]
+> **Please read before installing or using these skills.**
+>
+> - **Maturity:** These skills were developed at a rapid pace — including with the assistance of AI coding tools — primarily for internal use. They have not yet had the level of scrutiny required to consider them secure or stable enough for general usage. Use them with care and at your own risk.
+> - **They cause writes:** The skills drive [`openproject-cli`](https://github.com/opf/openproject-cli) against a live OpenProject instance, and the CLI has no dry-run. An agent following them can create and update real Work Packages. Point them at a test instance before trusting them with production data.
+> - **Moving target:** They target a specific `op` command surface (see [Prerequisites](#prerequisites)); a different CLI version can silently change the meaning of a command.
+> - **Support:** This is unsupported software with no official technical support from OpenProject GmbH.
+
 Reusable agent skills for working with OpenProject from the command line.
 
 ## Skills
