@@ -14,21 +14,28 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so changesets can generate changelogs with the
           # correct commits.
           fetch-depth: 0
-      - uses: oven-sh/setup-bun@v2
+          # changesets/action pushes through the GitHub API rather than the
+          # git CLI, so it does not need the checkout credentials.
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
       - run: bun install --frozen-lockfile
       # The package is private, so `changeset publish` skips npm entirely and
       # only pushes the git tag; changesets/action turns that tag into a
       # GitHub Release.
       - name: Create Release PR or tag release
-        uses: changesets/action@v1
+        uses: changesets/action@198f833dd7d863100ea6e28967bc9a9fdefadb0a # v2.1.0
         with:
-          title: Release Tracking
-          version: bun run changeset:version
-          publish: bun run release
+          # changesets/action v2 renamed these inputs.
+          pr-title: Release Tracking
+          version-script: bun run changeset:version
+          publish-script: bun run release
         env:
+          # Read by @changesets/changelog-github, not by the action itself:
+          # v2 takes its own token through the github-token input, which
+          # defaults to the workflow token.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
