@@ -43,3 +43,28 @@ take `--subject`, `--type`, `--assignee`, `--description`, `--attach`, and
 `--action`; and `list` to take `--parent-id`. If you instead see the older
 `op <verb> workpackage` form with `--set`/`--dry-run`/`--status`, that build
 predates this skill's contract.
+
+### `writing-primer-viewcomponents`
+
+A `SKILL.md` (plus three reference files) that teaches agents the OpenProject
+house style for authoring reusable ViewComponents built on GitHub Primer:
+designing a primitive's slot / enum-param / system-argument API, the
+`before_render`/`render?` lifecycle, the heading-accessibility rule, migrating
+bespoke markup onto a shared component such as `BorderBoxListComponent`, and
+writing the Lookbook preview, docs, and component spec.
+
+- Source: [`writing-primer-viewcomponents/SKILL.md`](writing-primer-viewcomponents/SKILL.md),
+  with [`authoring-primitives.md`](writing-primer-viewcomponents/authoring-primitives.md),
+  [`migrating-consumers.md`](writing-primer-viewcomponents/migrating-consumers.md),
+  and [`component-specs.md`](writing-primer-viewcomponents/component-specs.md).
+- Scope: authoring, migrating, and speccing Primer-based ViewComponents in the
+  openproject repo.
+- Portability: **repo-aware** — it cites repo-relative anchors
+  (`CLAUDE.local.md`, `app/AGENTS.md`, `app/components/**`, `lookbook/**`,
+  `modules/grids/app/components/grids/widget_box_component.rb`) and discovers the
+  Primer gem dynamically (`bundle show openproject-primer_view_components`). It
+  assumes it runs against an `openproject` checkout; it uses no absolute or
+  home-directory paths.
+- Validation: see
+  [`writing-primer-viewcomponents/validation/`](writing-primer-viewcomponents/validation/)
+  for the RED/GREEN scenarios and the loophole log.
