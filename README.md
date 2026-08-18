@@ -26,16 +26,6 @@ dry-run.
 - Validation: see [`validation/`](validation/) for the RED/GREEN scenarios and
   the loophole log.
 
-#### Install
-
-Drop the skill directory into your agent's skill location.
-
-Example for Claude Code:
-
-```sh
-cp -r openproject-workpackage-crud ~/.claude/skills/
-```
-
 #### Prerequisites
 
 The skill targets the `op work-package` command surface (resource-first,
@@ -51,3 +41,49 @@ take `--subject`, `--type`, `--assignee`, `--description`, `--attach`, and
 `--action`; and `list` to take `--parent-id`. If you instead see the older
 `op <verb> workpackage` form with `--set`/`--dry-run`/`--status`, that build
 predates this skill's contract.
+
+## Installation
+
+Install with the [`skills`](https://github.com/vercel-labs/skills) CLI, which
+resolves this repository and writes the skill into whichever coding agents you
+select:
+
+```sh
+npx skills add opf/openproject-agent-skills
+```
+
+Run without flags, it prompts for the target agents and the install scope. Use
+`npm i -g skills` if you would rather have a persistent `skills` binary than
+go through `npx` each time.
+
+To skip the prompts, name the agents:
+
+```sh
+# Claude Code, globally
+npx skills add opf/openproject-agent-skills -a claude-code -g
+
+# Codex and Pi
+npx skills add opf/openproject-agent-skills -a codex -a pi
+
+# every detected agent, no prompts
+npx skills add opf/openproject-agent-skills --agent '*' -y
+```
+
+Around 76 agents are supported — see
+[Supported Agents](https://github.com/vercel-labs/skills#supported-agents) for
+the full list of `--agent` values.
+
+By default the skill is installed into the current project (`.claude/skills/`,
+`.agents/skills/`, and so on, depending on the agent). Pass `-g` to install
+globally instead — `~/.claude/skills/` for Claude Code, `~/.codex/skills/` for
+Codex, `~/.pi/agent/skills/` for Pi.
+
+### Manual install
+
+Without `npx`, copy the skill directory into your agent's skill location:
+
+```sh
+cp -r openproject-workpackage-crud ~/.claude/skills/
+```
+
+Substitute the skills directory of whichever agent you are using.
