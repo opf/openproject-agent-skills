@@ -5,6 +5,8 @@ on:
     paths:
       - ".github/workflows/**"
       - ".github/actions/**"
+      # zizmor audits dependabot.yml too, so changes to it must retrigger.
+      - ".github/dependabot.yml"
   workflow_dispatch:
 
 permissions: {}
