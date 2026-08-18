@@ -87,3 +87,14 @@ cp -r openproject-workpackage-crud ~/.claude/skills/
 ```
 
 Substitute the skills directory of whichever agent you are using.
+
+## Releasing
+
+Releases are driven by [changesets](https://github.com/changesets/changesets),
+following the OpenProject org convention (`primer_view_components`,
+`openproject-octicons`, `rubocop-openproject`). When your PR changes skill
+behaviour, run `bunx changeset` and commit the generated file alongside your
+change. On merge to `main`, a "Release Tracking" PR collects pending changesets;
+merging that PR bumps the version, updates `CHANGELOG.md`, and tags the release
+on GitHub. Nothing is published to npm — the package is private, and the
+`skills` CLI installs straight from this repository.

@@ -1,0 +1,34 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so changesets can generate changelogs with the
+          # correct commits.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      # The package is private, so `changeset publish` skips npm entirely and
+      # only pushes the git tag; changesets/action turns that tag into a
+      # GitHub Release.
+      - name: Create Release PR or tag release
+        uses: changesets/action@v1
+        with:
+          title: Release Tracking
+          version: bun run changeset:version
+          publish: bun run release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
