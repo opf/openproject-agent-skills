@@ -21,7 +21,16 @@ updates:
           - patch
     labels:
       - dependencies
+    # Widen GitHub's implicit 3-day cooldown to 7. A compromised release is
+    # usually yanked quickly, so waiting a week avoids opening a PR for one.
+    # Costs nothing here: these are devDependencies on a weekly schedule.
+    cooldown:
+      default-days: 7
 
+  # No cooldown block here: the options reference marks cooldown unsupported
+  # for the github-actions ecosystem, for both default-days and semver-bump
+  # days, and dependabot-core#14645 reports it being ignored. Setting it
+  # anyway would be inert config that reads as protection.
   - package-ecosystem: github-actions
     directory: /
     schedule:
