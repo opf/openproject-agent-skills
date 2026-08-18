@@ -1,0 +1,45 @@
+version: 2
+
+# Bun version updates are GA, but some updates are still reported as
+# impossible without this flag, and it is inert otherwise.
+enable-beta-ecosystems: true
+
+updates:
+  # bun, not npm: npm routes updates through the npm/yarn code path, which
+  # leaves bun.lock untouched and breaks `bun install --frozen-lockfile`.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+    # Widen GitHub's implicit 3-day cooldown to 7. A compromised release is
+    # usually yanked quickly, so waiting a week avoids opening a PR for one.
+    # Costs nothing here: these are devDependencies on a weekly schedule.
+    cooldown:
+      default-days: 7
+
+  # No cooldown block here: the options reference marks cooldown unsupported
+  # for the github-actions ecosystem, for both default-days and semver-bump
+  # days, and dependabot-core#14645 reports it being ignored. Setting it
+  # anyway would be inert config that reads as protection.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - ci
