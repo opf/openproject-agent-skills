@@ -1,0 +1,36 @@
+version: 2
+
+# Bun version updates are GA, but some updates are still reported as
+# impossible without this flag, and it is inert otherwise.
+enable-beta-ecosystems: true
+
+updates:
+  # bun, not npm: npm routes updates through the npm/yarn code path, which
+  # leaves bun.lock untouched and breaks `bun install --frozen-lockfile`.
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - "*"
+    labels:
+      - dependencies
+      - ci
