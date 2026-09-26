@@ -81,9 +81,15 @@ op work-package create "<subject>" -p <project> --type <type> \
 is the positional argument. `--assignee` takes a numeric user ID. If the prompt
 lacks the project or enough detail to create safely, ask one short follow-up.
 
-The CLI has no `--parent` flag: it cannot set a parent at create time. If the
-user asks for a child under `WP#1234`, say the CLI cannot link a parent and
-confirm whether to create it standalone in the same project instead.
+The CLI has no `--parent` flag: it cannot set a parent at create time. When a
+child work package is requested under a parent `WP#1234`:
+1. Create the work package standalone in the same project first.
+2. Link the parent afterwards via:
+   - The signed-in Community browser UI (edit the Parent field and save/verify), OR
+   - When authorized by the user, an API v3 PATCH call:
+     `PATCH /api/v3/work_packages/{id}` with current `lockVersion` and
+     `{"_links": {"parent": {"href": "/api/v3/work_packages/<parent-id>"}}}`.
+     See KB note `patterns/wp-relations-via-api.md`.
 
 ## Update Workflow
 
@@ -131,7 +137,8 @@ Common actions on internal `Implementation` tickets (examples, not defaults):
 - Do not invent action titles or iterate through candidates against a shared
   Work Package. A rejected action is a stop condition: ask for the exact title.
 - If the CLI returns structured errors, reason from those errors instead of
-  switching to raw `/api/v3` calls.
+  switching to raw `/api/v3` calls (relations and parent linking post-creation
+  are the documented exception per KB `patterns/wp-relations-via-api.md`).
 
 ## Not Yet Supported By The CLI
 
@@ -144,7 +151,7 @@ this CLI today (they may return in a later release):
 - Epic body fields beyond `description` (e.g. `Acceptance criteria`,
   `Motivation and background information`, `Out of scope`)
 - setting status by name (`--status`) — use `--action` instead
-- setting a parent on create (`--parent`)
+- setting a parent on create (`--parent`) — link via UI or authorized API v3 PATCH after creation
 - `--dry-run` write previews
 
 ## Scope
